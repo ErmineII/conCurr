@@ -20,51 +20,73 @@ local cons = {
   end,
 }
 cons.__add = cons
-setmetatable(cons, {__call = function(l,r)
+setmetatable(cons, {__call = function(_, l, r)
   return setmetatable({l=l, r=r}, cons)
 end})
 cnc.cons = cons
 
-cnc.read = function(s)
-  local consume, skipWS, skipComment, inpAtom, inpQatom,
-        inpStruct, inpStructBody, inpExpr, asStream
-
-  function asStream(obj)
-    if type(obj) == 'string' then
-      return {
-        char = 1,
-        peek = function(self)
-          assert(self.char <= obj:len(),
-            ('EOF while reading from string %q'):format(obj))
-          return obj:sub(self.char, self.char)
-        end,
-        next = function(self)
-          self.char = self.char + 1
-          return obj:sub(self.char-1, self.char-1)
+local function asStream(obj)
+  if type(obj) == 'string' then
+    return {
+      src = obj,
+      char = 1,
+      peek = function(self)
+        assert(self.char <= self.src:len(),
+          ('EOF while reading from string %q'):format(self.src))
+        return self.src:sub(self.char, self.char)
+      end,
+      next = function(self)
+        self.char = self.char + 1
+        return self.src:sub(self.char-1, self.char-1)
+      end,
+      atEnd = function(self)
+        return self.char == #self.src+1
+      end,
+    }
+  elseif type(obj) == 'userdata' or obj == nil then
+    obj = obj or io.input()
+    return {
+      src = obj,
+      _peek = false,
+      peek = function(self)
+        self._peek = self._peek or self.src:read(1) or
+          error('EOF while reading file')
+        return self._peek
+      end,
+      next = function(self)
+        local next = self._peek
+        self._peek = false
+        return next
+      end,
+      atEnd = function(self)
+        local pos = self.src:seek()
+        if self.src:read(1) == nil then
+          self.src:seek(pos)
+          return true
+        else
+          self.src:seek(pos)
+          return false
         end
-      }
-    else
-      obj = obj or io.input()
-      return {
-        _peek = false,
-        peek = function(self)
-          self._peek = self._peek or obj:read(1) or
-            error('EOF while reading file')
-          return self._peek
-        end,
-        next = function(self)
-          local next = self._peek
-          self._peek = false
-          return next
-        end
-      }
-    end
+      end,
+    }
+  else
+    return obj
   end
+end
+
+cnc.read = function(s, strict)
+  local consume, skipWS, skipComment, inpAtom, inpQatom,
+        inpStruct, inpStructBody, inpExpr, fmt
 
   s = asStream(s)
 
+  function fmt(msg)
+    return (s.char and ('string %q char %i:'):format(s.char) or '')
+       ..msg
+  end
+
   function consume(ch)
-    return s:peek() == ch and s:next() or false
+    return (not s:atEnd()) and (s:peek() == ch and s:next() or false)
   end
 
   local function isWS(c) return c:find('[ \n\t#]') end
@@ -73,7 +95,7 @@ cnc.read = function(s)
 
 -- ws <- (' ' | '\n' | '\t' | '#' comment)*
   function skipWS()
-    while isWS(s:peek()) do
+    while not(s:atEnd()) and isWS(s:peek()) do
       if s:next() == '#' then
         skipComment()
       end
@@ -97,10 +119,10 @@ cnc.read = function(s)
 -- atom <- !ws !( '(' | ')' | '[' | ']' | ':' | '"' ) char*
   function inpAtom()
     local atom = ''
-    while not(isWS(s:peek()) or isDL(s:peek())) do
+    while not(s:atEnd() or isWS(s:peek()) or isDL(s:peek())) do
       atom = atom .. s:next()
     end
-    assert(atom ~= '', 'Atom expected.')
+    assert(atom ~= '', fmt 'Atom expected.')
     return atom
   end
 
@@ -131,7 +153,7 @@ cnc.read = function(s)
       struct = inpExpr()
     end
     skipWS()
-    while not s:peek():find('[%])]') do
+    while not (s:atEnd() or s:peek():find('[%])]')) do
       struct = cons(struct, inpExpr())
       skipWS()
     end
@@ -146,15 +168,16 @@ cnc.read = function(s)
       return cons(nil, inpStructBody())
     elseif consume('(') then
       local tmp = inpStructBody()
-      consume(')') -- note that this is not mandatory:
-                   -- [+ 1 (* 2 3] is equivalent to [+ 1 (* 2 3)]
+      assert(consume(')') or not strict, fmt "unterminated parentheses")
+      -- note that this is not mandatory except for in strict mode:
+      -- [+ 1 (* 2 3] is equivalent to [+ 1 (* 2 3)]
       return tmp
     elseif consume('[') then
       local tmp = inpStructBody()
-      consume(']')
+      assert(consume(']') or not strict, fmt "unterminated brackets")
       return cons(nil, tmp)
     else
-      error "Structural ( [] or () ) expression expected"
+      error(fmt "Structural ( [] or () ) expression expected")
     end
   end
 
@@ -189,7 +212,7 @@ function cnc.str(obj)
   elseif type(obj) == 'number' or type(obj) == 'string' then
     return obj..''
   else
-   dbg=obj
+   return '#! lua: '..tostring(obj)..' !#'
   end
 end
 
@@ -208,6 +231,12 @@ function cnc.parenlessStr(obj, root)
   else
     return ': ' .. cnc.str(obj)
   end
+end
+
+function cnc.run(s, strict)
+  s = asStream(s)
+  local runner = require('cncrun.'..cnc.read(s, strict))
+  return runner(cnc.read(s))
 end
 
 return cnc
