@@ -13,13 +13,20 @@ cons = {
     return nil
   end,
   is = function(obj) return getmetatable(obj) == cons end,
+  __index = function (self, index)
+    if index = "car" then return self[1]
+    elseif index = "cdr" then return self[2]
+    elseif index = "l" then return self[1]
+    elseif index = "r" then return self[2]
+    else error() end
+  end
 }
 
 cons.__add = cons
 cons.__div = cons.assoc
 
 setmetatable(cons, {__call = function(_, l, r)
-  return setmetatable({l=l, r=r}, cons)
+  return setmetatable({[1]=l, [2]=r}, cons)
 end})
 
 return cons
