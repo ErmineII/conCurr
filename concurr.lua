@@ -81,7 +81,7 @@ cnc.read = function(s, strict)
   s = asStream(s)
 
   function fmt(msg)
-    return (s.char and ('string %q char %i:'):format(s.char) or '')
+    return (s.char and ('string %q char %i:'):format(s.src, s.char) or '')
        ..msg
   end
 
@@ -226,7 +226,7 @@ function cnc.parenlessStr(obj, root)
       return cnc.parenlessStr(obj.l) .. ' $ '
           .. cnc.parenlessStr(obj.r, true)
     else
-      return cnc.parenlessStr(obj.r) .. ' ' .. cnc.str(obj.r)
+      return cnc.parenlessStr(obj.l) .. ' ' .. cnc.str(obj.r)
     end
   else
     return ': ' .. cnc.str(obj)
