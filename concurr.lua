@@ -7,22 +7,7 @@
 
 local cnc = {}
 
-local cons = {
-  __div = function(lookup, key)
-    while lookup do
-      if lookup.r.l == key then
-        return lookup.r.r, 'T'
-      else
-        lookup = lookup.l
-      end
-    end
-    return nil, nil
-  end,
-}
-cons.__add = cons
-setmetatable(cons, {__call = function(_, l, r)
-  return setmetatable({l=l, r=r}, cons)
-end})
+local cons = require 'cons'
 cnc.cons = cons
 
 local function asStream(obj)
@@ -194,12 +179,10 @@ cnc.read = function(s, strict)
   return inpExpr()
 end
 
-local function isCons(o) return getmetatable(o) == cons end
-
 function cnc.str(obj)
-  if isCons(obj) then
+  if cons.is(obj) then
     if obj.l == nil then
-      if isCons(obj.r) then
+      if cons.is(obj.r) then
         return '['..cnc.parenlessStr(obj.r, true)..']'
       else
         return cnc.qatomstr(obj.r)
@@ -217,12 +200,12 @@ function cnc.str(obj)
 end
 
 function cnc.parenlessStr(obj, root)
-  if isCons(obj) then
-    if (not isCons(obj.l)) and obj.l then
+  if cons.is(obj) then
+    if (not cons.is(obj.l)) and obj.l then
       return ': ' .. cnc.str(obj.l) .. ' ' .. cnc.str(obj.r)
     elseif obj.l == nil then
       return cnc.str(obj.r)
-    elseif root and isCons(obj.r) then
+    elseif root and cons.is(obj.r) then
       return cnc.parenlessStr(obj.l) .. ' $ '
           .. cnc.parenlessStr(obj.r, true)
     else
