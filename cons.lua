@@ -14,10 +14,10 @@ cons = {
   end,
   is = function(obj) return getmetatable(obj) == cons end,
   __index = function (self, index)
-    if index = "car" then return self[1]
-    elseif index = "cdr" then return self[2]
-    elseif index = "l" then return self[1]
-    elseif index = "r" then return self[2]
+    if index == "car" then return self[1]
+    elseif index == "cdr" then return self[2]
+    elseif index == "l" then return self[1]
+    elseif index == "r" then return self[2]
     else error() end
   end
 }
